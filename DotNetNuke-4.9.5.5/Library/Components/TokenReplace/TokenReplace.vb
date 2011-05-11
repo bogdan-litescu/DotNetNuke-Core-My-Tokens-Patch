@@ -449,6 +449,7 @@ Namespace DotNetNuke.Services.Tokens
             Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
         End Function
 
+
 #End Region
 
 #Region "Private methods"

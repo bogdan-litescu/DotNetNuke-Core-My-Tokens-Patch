@@ -1,6 +1,6 @@
 '
 ' DotNetNuke® - http://www.dotnetnuke.com
-' Copyright (c) 2002-2008 by DotNetNuke Corp. 
+' Copyright (c) 2002-2010 by DotNetNuke Corp. 
 '
 ' Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
 ' documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
@@ -18,7 +18,6 @@
 '
 
 Imports DotNetNuke
-Imports DotNetNuke.Entities.Host.HostSettings
 Imports DotNetNuke.Entities.Modules
 Imports DotNetNuke.Entities.Portals
 Imports DotNetNuke.Entities.Tabs
@@ -31,6 +30,7 @@ Imports System.Web
 Imports System.Text
 Imports System.Text.RegularExpressions
 Imports System.Reflection
+Imports System.Collections.Generic
 
 
 Namespace DotNetNuke.Services.Tokens
@@ -47,10 +47,10 @@ Namespace DotNetNuke.Services.Tokens
     Public Class TokenReplace
         Inherits BaseCustomTokenReplace
 
-#Region " Private Fields "
+#Region "Private Fields "
 
         Private _PortalSettings As PortalSettings
-        Private _Hostsettings As Hashtable
+        Private _Hostsettings As Dictionary(Of String, String)
         Private _ModuleInfo As Entities.Modules.ModuleInfo
         Private _User As Entities.Users.UserInfo
         Private _Tab As Entities.Tabs.TabInfo
@@ -58,21 +58,54 @@ Namespace DotNetNuke.Services.Tokens
 
 #End Region
 
-#Region " Properties "
+#Region "Public Properties "
 
         ''' <summary>
         ''' Gets the Host settings from Portal
         ''' </summary>
         ''' <value>A hashtable with all settings</value>
-        Private ReadOnly Property HostSettings() As Hashtable
+        Private ReadOnly Property HostSettings() As Dictionary(Of String, String)
             Get
                 If _Hostsettings Is Nothing Then
-                    _Hostsettings = GetSecureHostSettings()
+                    _Hostsettings = Host.GetSecureHostSettingsDictionary()
                 End If
                 Return _Hostsettings
             End Get
         End Property
 
+        ''' <summary>
+        ''' Gets/sets the current ModuleID to be used for 'User:' token replacement
+        ''' </summary>
+        ''' <value>ModuleID (Integer)</value>
+        Public Property ModuleId() As Integer
+            Get
+                Return _ModuleId
+            End Get
+            Set(ByVal value As Integer)
+
+                _ModuleId = value
+            End Set
+        End Property
+
+        ''' <summary>
+        ''' Gets/sets the module settings object to use for 'Module:' token replacement
+        ''' </summary>
+        Public Property ModuleInfo() As Entities.Modules.ModuleInfo
+            Get
+                If ModuleId > Integer.MinValue AndAlso (_ModuleInfo Is Nothing OrElse _ModuleInfo.ModuleID <> ModuleId) Then
+                    Dim mc As New DotNetNuke.Entities.Modules.ModuleController
+                    If Not PortalSettings Is Nothing AndAlso Not PortalSettings.ActiveTab Is Nothing Then
+                        _ModuleInfo = mc.GetModule(ModuleId, PortalSettings.ActiveTab.TabID, False)
+                    Else
+                        _ModuleInfo = mc.GetModule(ModuleId)
+                    End If
+                End If
+                Return _ModuleInfo
+            End Get
+            Set(ByVal value As Entities.Modules.ModuleInfo)
+                _ModuleInfo = value
+            End Set
+        End Property
 
         ''' <summary>
         ''' Gets/sets the portal settings object to use for 'Portal:' token replacement
@@ -88,22 +121,6 @@ Namespace DotNetNuke.Services.Tokens
         End Property
 
         ''' <summary>
-        ''' Gets/sets the module settings object to use for 'Module:' token replacement
-        ''' </summary>
-        Public Property ModuleInfo() As Entities.Modules.ModuleInfo
-            Get
-                If ModuleId > Integer.MinValue AndAlso (_ModuleInfo Is Nothing OrElse _ModuleInfo.ModuleID <> ModuleId) Then
-                    Dim mc As New DotNetNuke.Entities.Modules.ModuleController
-                    _ModuleInfo = mc.GetModule(ModuleId, PortalSettings.ActiveTab.TabID)
-                End If
-                Return _ModuleInfo
-            End Get
-            Set(ByVal value As Entities.Modules.ModuleInfo)
-                _ModuleInfo = value
-            End Set
-        End Property
-
-        ''' <summary>
         ''' Gets/sets the user object to use for 'User:' token replacement
         ''' </summary>
         ''' <value>UserInfo oject</value>
@@ -113,22 +130,6 @@ Namespace DotNetNuke.Services.Tokens
             End Get
             Set(ByVal value As Entities.Users.UserInfo)
                 _User = value
-            End Set
-        End Property
-
-
-
-        ''' <summary>
-        ''' Gets/sets the current ModuleID to be used for 'User:' token replacement
-        ''' </summary>
-        ''' <value>ModuleID (Integer)</value>
-        Public Property ModuleId() As Integer
-            Get
-                Return _ModuleId
-            End Get
-            Set(ByVal value As Integer)
-
-                _ModuleId = value
             End Set
         End Property
 
@@ -212,16 +213,24 @@ Namespace DotNetNuke.Services.Tokens
             Me.CurrentAccessLevel = AccessLevel
             If AccessLevel <> Scope.NoSettings Then
                 If PortalSettings Is Nothing Then
-                    Me.PortalSettings = Entities.Portals.PortalController.GetCurrentPortalSettings
+                    If HttpContext.Current IsNot Nothing Then Me.PortalSettings = Entities.Portals.PortalController.GetCurrentPortalSettings
                 Else
                     Me.PortalSettings = PortalSettings
                 End If
                 If User Is Nothing Then
-                    Me.User = CType(HttpContext.Current.Items("UserInfo"), UserInfo)
+                    If HttpContext.Current IsNot Nothing Then
+                        Me.User = CType(HttpContext.Current.Items("UserInfo"), UserInfo)
+                    Else
+                        Me.User = New UserInfo
+                    End If
                     Me.AccessingUser = Me.User
                 Else
                     Me.User = User
-                    Me.AccessingUser = CType(HttpContext.Current.Items("UserInfo"), UserInfo)
+                    If HttpContext.Current IsNot Nothing Then
+                        Me.AccessingUser = CType(HttpContext.Current.Items("UserInfo"), UserInfo)
+                    Else
+                        Me.AccessingUser = New UserInfo
+                    End If
                 End If
                 If String.IsNullOrEmpty(Language) Then
                     Me.Language = New Localization.Localization().CurrentCulture
@@ -278,7 +287,7 @@ Namespace DotNetNuke.Services.Tokens
         ''' <param name="CustomCaption"></param>
         ''' <returns>string containing replaced values</returns>
         Public Function ReplaceEnvironmentTokens(ByVal strSourceText As String, ByVal Custom As ArrayList, ByVal CustomCaption As String) As String
-            PropertySource.Add(CustomCaption.ToLower, New ArrayListPropertyAccess(Custom))
+            PropertySource(CustomCaption.ToLower) = New ArrayListPropertyAccess(Custom)
             If IsMyTokensInstalled() Then
                 Return TokenizeWithMyTokens(strSourceText)
             End If
@@ -296,7 +305,7 @@ Namespace DotNetNuke.Services.Tokens
         ''' 08/10/2007 sLeupold created
         ''' </history>
         Public Function ReplaceEnvironmentTokens(ByVal strSourceText As String, ByVal Custom As IDictionary, ByVal CustomCaption As String) As String
-            PropertySource.Add(CustomCaption.ToLower, New DictionaryPropertyAccess(Custom))
+            PropertySource(CustomCaption.ToLower) = New DictionaryPropertyAccess(Custom)
             If IsMyTokensInstalled() Then
                 Return TokenizeWithMyTokens(strSourceText)
             End If
@@ -318,7 +327,7 @@ Namespace DotNetNuke.Services.Tokens
             Dim rowProperties As New DataRowPropertyAccess(Row)
             PropertySource("field") = rowProperties
             PropertySource("row") = rowProperties
-            PropertySource.Add(CustomCaption.ToLower, New ArrayListPropertyAccess(Custom))
+            PropertySource(CustomCaption.ToLower) = New ArrayListPropertyAccess(Custom)
             If IsMyTokensInstalled() Then
                 Return TokenizeWithMyTokens(strSourceText)
             End If
@@ -337,6 +346,7 @@ Namespace DotNetNuke.Services.Tokens
             InitializePropertySources()
             Return MyBase.ReplaceTokens(strSourceText)
         End Function
+
 
 
         Function IsMyTokensInstalled() As Boolean
@@ -449,6 +459,7 @@ Namespace DotNetNuke.Services.Tokens
             Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
         End Function
 
+
 #End Region
 
 #Region "Private methods"
@@ -464,21 +475,27 @@ Namespace DotNetNuke.Services.Tokens
         ''' </remarks>
         Private Sub InitializePropertySources()
 
-            ' cleanup
-            PropertySource.Remove("portal")
-            PropertySource.Remove("tab")
-            PropertySource.Remove("user")
-            PropertySource.Remove("membership")
-            PropertySource.Remove("profile")
-            PropertySource.Remove("host")
-            PropertySource.Remove("module")
+            'Cleanup, by default "" is returned for these objects and any property
+            Dim DefaultPropertyAccess As IPropertyAccess = New EmptyPropertyAccess()
+            PropertySource("portal") = DefaultPropertyAccess
+            PropertySource("tab") = DefaultPropertyAccess
+            PropertySource("host") = DefaultPropertyAccess
+            PropertySource("module") = DefaultPropertyAccess
+            PropertySource("user") = DefaultPropertyAccess
+            PropertySource("membership") = DefaultPropertyAccess
+            PropertySource("profile") = DefaultPropertyAccess
 
             'initialization
             If CurrentAccessLevel >= Scope.Configuration Then
-                PropertySource("portal") = PortalSettings
-                PropertySource("tab") = PortalSettings.ActiveTab
+                If PortalSettings IsNot Nothing Then
+                    PropertySource("portal") = PortalSettings
+                    PropertySource("tab") = PortalSettings.ActiveTab
+           
+                End If
                 PropertySource("host") = New HostPropertyAccess()
-                If Not (ModuleInfo Is Nothing) Then PropertySource("module") = ModuleInfo
+                If Not (ModuleInfo Is Nothing) Then
+                    PropertySource("module") = ModuleInfo
+                End If
             End If
 
             If CurrentAccessLevel >= Scope.DefaultSettings AndAlso Not (User Is Nothing OrElse User.UserID = -1) Then
@@ -486,6 +503,7 @@ Namespace DotNetNuke.Services.Tokens
                 PropertySource("membership") = New MembershipPropertyAccess(User)
                 PropertySource("profile") = New ProfilePropertyAccess(User)
             End If
+
         End Sub
 
 #End Region
