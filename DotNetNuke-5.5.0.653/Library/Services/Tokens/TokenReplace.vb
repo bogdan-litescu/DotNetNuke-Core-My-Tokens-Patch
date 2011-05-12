@@ -353,7 +353,7 @@ Namespace DotNetNuke.Services.Tokens
 
 
         Function IsMyTokensInstalled() As Boolean
-            Dim cacheKey_Installed As String = "avt.MyTokens2.Installed"
+            Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
 
             If HttpRuntime.Cache.Get(cacheKey_Installed) Is Nothing Then
                 TokenizeWithMyTokens(" ")
@@ -373,8 +373,8 @@ Namespace DotNetNuke.Services.Tokens
             End If
 
             Dim cacheKey_Lock As String = "avt.MyTokens2.Lock"
-            Dim cacheKey_Installed As String = "avt.MyTokens2.Installed"
-            Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithProps"
+            Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
+            Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithPropsCore"
 
             Dim bMyTokensInstalled As String = "no"
             Dim methodReplaceWithProps As MethodInfo = Nothing
