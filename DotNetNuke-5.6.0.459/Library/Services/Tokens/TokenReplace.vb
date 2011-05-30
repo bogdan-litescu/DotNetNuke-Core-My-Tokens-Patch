@@ -368,98 +368,90 @@ Namespace DotNetNuke.Services.Tokens
 
         Function TokenizeWithMyTokens(ByVal strContent As String) As String
 
-            If HttpRuntime.Cache Is Nothing Then
-                Return strContent
-            End If
+            SyncLock GetType(TokenReplace)
 
-            Dim cacheKey_Lock As String = "avt.MyTokens2.Lock"
-            Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
-            Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithPropsCore"
-
-            Dim bMyTokensInstalled As String = "no"
-            Dim methodReplaceWithProps As MethodInfo = Nothing
-
-            ' first, determine if MyTokens is installed
-            Dim bCheck As Boolean = HttpRuntime.Cache.Get(cacheKey_Installed) Is Nothing
-            If Not bCheck Then
-                bCheck = HttpRuntime.Cache.Get(cacheKey_Installed).ToString() = "yes" And HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp) Is Nothing
-            End If
-
-            If bCheck Then
-
-                ' get global lock 
-                If HttpRuntime.Cache.Get(cacheKey_Lock) Is Nothing Then
-                    HttpRuntime.Cache.Insert(cacheKey_Lock, New Object())
-                End If
-
-                SyncLock HttpRuntime.Cache.Get(cacheKey_Lock)
-
-                    ' check again, maybe current thread was locked by another which did all the work
-                    If HttpRuntime.Cache.Get(cacheKey_Installed) Is Nothing Then
-
-                        ' it's not in cache, let's determine if it's installed
-                        Try
-                            Dim myTokensRepl As Type = DotNetNuke.Framework.Reflection.CreateType("avt.MyTokens.MyTokensReplacer")
-                            If myTokensRepl Is Nothing Then
-                                Throw New Exception()
-                            End If
-                            ' handled in catch
-                            bMyTokensInstalled = "yes"
-
-                            ' we now know MyTokens is installed, get ReplaceTokensAll methods
-                            methodReplaceWithProps = myTokensRepl.GetMethod( _
-                                "ReplaceTokensAll", _
-                                BindingFlags.[Public] Or BindingFlags.[Static], _
-                                Nothing, _
-                                CallingConventions.Any, _
-                                New Type() { _
-                                    GetType(String), _
-                                    GetType(UserInfo), _
-                                    GetType(Boolean), _
-                                    GetType(ModuleInfo), _
-                                    GetType(System.Collections.Generic.Dictionary(Of String, IPropertyAccess)), _
-                                    GetType(Scope), _
-                                    GetType(UserInfo) _
-                                }, Nothing)
-
-                            If methodReplaceWithProps Is Nothing Then
-                                ' this shouldn't really happen, we know MyTokens is installed
-                                Throw New Exception()
-
-                            End If
-                        Catch
-                            bMyTokensInstalled = "no"
-                        End Try
-
-                        ' cache values so next time the funciton is called the reflection logic is skipped
-                        HttpRuntime.Cache.Insert(cacheKey_Installed, bMyTokensInstalled)
-                        If bMyTokensInstalled = "yes" Then
-                            HttpRuntime.Cache.Insert(cacheKey_MethodReplaceWithProp, methodReplaceWithProps)
-                            HttpRuntime.Cache.Insert("avt.MyTokens.CorePatched", "true")
-                            HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "true")
-                        Else
-                            HttpRuntime.Cache.Insert("avt.MyTokens.CorePatched", "false")
-                            HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "false")
-                        End If
-                    End If
-                End SyncLock
-            End If
-
-            bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString()
-            If bMyTokensInstalled = "yes" Then
-                If strContent.IndexOf("[") = -1 Then
+                If HttpRuntime.Cache Is Nothing Then
                     Return strContent
                 End If
-                methodReplaceWithProps = DirectCast(HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp), MethodInfo)
-                If (methodReplaceWithProps Is Nothing) Then
-                    Return TokenizeWithMyTokens(strContent)
-                End If
-            Else
-                Return strContent
-            End If
 
-            ' we have MyTokens installed, proceed to token replacement
-            Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
+                Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
+                Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithPropsCore"
+
+                Dim bMyTokensInstalled As String = "no"
+                Dim methodReplaceWithProps As MethodInfo = Nothing
+
+                ' first, determine if MyTokens is installed
+                Dim bCheck As Boolean = HttpRuntime.Cache.Get(cacheKey_Installed) Is Nothing
+                If Not bCheck Then
+                    bCheck = HttpRuntime.Cache.Get(cacheKey_Installed).ToString() = "yes" And HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp) Is Nothing
+                End If
+
+                If bCheck Then
+
+                    ' it's not in cache, let's determine if it's installed
+                    Try
+                        Dim myTokensRepl As Type = DotNetNuke.Framework.Reflection.CreateType("avt.MyTokens.MyTokensReplacer")
+                        If myTokensRepl Is Nothing Then
+                            Throw New Exception()
+                        End If
+                        ' handled in catch
+                        bMyTokensInstalled = "yes"
+
+                        ' we now know MyTokens is installed, get ReplaceTokensAll methods
+                        methodReplaceWithProps = myTokensRepl.GetMethod( _
+                            "ReplaceTokensAll", _
+                            BindingFlags.[Public] Or BindingFlags.[Static], _
+                            Nothing, _
+                            CallingConventions.Any, _
+                            New Type() { _
+                                GetType(String), _
+                                GetType(UserInfo), _
+                                GetType(Boolean), _
+                                GetType(ModuleInfo), _
+                                GetType(System.Collections.Generic.Dictionary(Of String, IPropertyAccess)), _
+                                GetType(Scope), _
+                                GetType(UserInfo) _
+                            }, Nothing)
+
+                        If methodReplaceWithProps Is Nothing Then
+                            ' this shouldn't really happen, we know MyTokens is installed
+                            Throw New Exception()
+
+                        End If
+                    Catch
+                        bMyTokensInstalled = "no"
+                    End Try
+
+                    ' cache values so next time the funciton is called the reflection logic is skipped
+                    HttpRuntime.Cache.Insert(cacheKey_Installed, bMyTokensInstalled)
+                    If bMyTokensInstalled = "yes" Then
+                        HttpRuntime.Cache.Insert(cacheKey_MethodReplaceWithProp, methodReplaceWithProps)
+                        HttpRuntime.Cache.Insert("avt.MyTokens.CorePatched", "true")
+                        HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "true")
+                    Else
+                        HttpRuntime.Cache.Insert("avt.MyTokens.CorePatched", "false")
+                        HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "false")
+                    End If
+                End If
+
+                bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString()
+                If bMyTokensInstalled = "yes" Then
+                    If strContent.IndexOf("[") = -1 Then
+                        Return strContent
+                    End If
+                    methodReplaceWithProps = DirectCast(HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp), MethodInfo)
+                    If (methodReplaceWithProps Is Nothing) Then
+                        HttpRuntime.Cache.Remove(cacheKey_Installed)
+                        Return TokenizeWithMyTokens(strContent)
+                    End If
+                Else
+                    Return strContent
+                End If
+
+                ' we have MyTokens installed, proceed to token replacement
+                Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
+
+            End SyncLock
         End Function
 
 
