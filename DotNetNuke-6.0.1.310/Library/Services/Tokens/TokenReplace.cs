@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2011
+// Copyright (c) 2002-2012
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -35,8 +35,6 @@ using DotNetNuke.Entities.Host;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Portals;
 using DotNetNuke.Entities.Users;
-using System.Reflection;
-using System;
 
 #endregion
 
@@ -391,7 +389,6 @@ namespace DotNetNuke.Services.Tokens
             return base.ReplaceTokens(strSourceText);
         }
 
-
         public bool IsMyTokensInstalled()
         {
             string cacheKey_Installed = "avt.MyTokens2.InstalledCore";
@@ -401,7 +398,7 @@ namespace DotNetNuke.Services.Tokens
             }
             try {
                 return HttpRuntime.Cache.Get(cacheKey_Installed).ToString() == "yes";
-            } catch (Exception ex) {
+            } catch (System.Exception ex) {
                 return false;
             }
         }
@@ -409,17 +406,16 @@ namespace DotNetNuke.Services.Tokens
 
         public string TokenizeWithMyTokens(string strContent)
         {
+            if (HttpRuntime.Cache == null)
+                return strContent;
+
+            string cacheKey_Installed = "avt.MyTokens2.InstalledCore";
+            string cacheKey_MethodReplaceWithProp = "avt.MyTokens2.MethodReplaceWithPropsCore";
+
+            string bMyTokensInstalled = "no";
+            System.Reflection.MethodInfo methodReplaceWithProps = null;
+
             lock (typeof(TokenReplace)) {
-                if (HttpRuntime.Cache == null) {
-                    return strContent;
-                }
-
-                string cacheKey_Installed = "avt.MyTokens2.InstalledCore";
-                string cacheKey_MethodReplaceWithProp = "avt.MyTokens2.MethodReplaceWithPropsCore";
-
-                string bMyTokensInstalled = "no";
-                MethodInfo methodReplaceWithProps = null;
-
                 // first, determine if MyTokens is installed
                 bool bCheck = HttpRuntime.Cache.Get(cacheKey_Installed) == null;
                 if (!bCheck) {
@@ -429,27 +425,27 @@ namespace DotNetNuke.Services.Tokens
                 if (bCheck) {
                     // it's not in cache, let's determine if it's installed
                     try {
-                        Type myTokensRepl = DotNetNuke.Framework.Reflection.CreateType("avt.MyTokens.MyTokensReplacer");
+                        System.Type myTokensRepl = DotNetNuke.Framework.Reflection.CreateType("avt.MyTokens.MyTokensReplacer");
                         if (myTokensRepl == null) {
-                            throw new Exception();
+                            throw new System.Exception();
                         }
                         // handled in catch
                         bMyTokensInstalled = "yes";
 
                         // we now know MyTokens is installed, get ReplaceTokensAll methods
-                        methodReplaceWithProps = myTokensRepl.GetMethod("ReplaceTokensAll", BindingFlags.Public | BindingFlags.Static, null, CallingConventions.Any, new Type[] {
-					        typeof(string),
-					        typeof(UserInfo),
-					        typeof(bool),
-					        typeof(ModuleInfo),
-					        typeof(System.Collections.Generic.Dictionary<string, IPropertyAccess>),
-					        typeof(Scope),
-					        typeof(UserInfo)
-				        }, null);
+                        methodReplaceWithProps = myTokensRepl.GetMethod("ReplaceTokensAll", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, System.Reflection.CallingConventions.Any, new System.Type[] {
+					            typeof(string),
+					            typeof(UserInfo),
+					            typeof(bool),
+					            typeof(ModuleInfo),
+					            typeof(System.Collections.Generic.Dictionary<string, IPropertyAccess>),
+					            typeof(Scope),
+					            typeof(UserInfo)
+				            }, null);
 
                         if (methodReplaceWithProps == null) {
                             // this shouldn't really happen, we know MyTokens is installed
-                            throw new Exception();
+                            throw new System.Exception();
 
                         }
                     } catch {
@@ -467,33 +463,31 @@ namespace DotNetNuke.Services.Tokens
                         HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "false");
                     }
                 }
+            }
 
-                bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString();
-                if (bMyTokensInstalled == "yes") {
-                    if (strContent.IndexOf("[") == -1) {
-                        return strContent;
-                    }
-                    methodReplaceWithProps = (MethodInfo)HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp);
-                    if ((methodReplaceWithProps == null)) {
-                        HttpRuntime.Cache.Remove(cacheKey_Installed);
-                        return TokenizeWithMyTokens(strContent);
-                    }
-                } else {
+            bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString();
+            if (bMyTokensInstalled == "yes") {
+                if (strContent.IndexOf("[") == -1) {
                     return strContent;
                 }
+                methodReplaceWithProps = (System.Reflection.MethodInfo)HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp);
+                if ((methodReplaceWithProps == null)) {
+                    HttpRuntime.Cache.Remove(cacheKey_Installed);
+                    return TokenizeWithMyTokens(strContent);
+                }
+            } else {
+                return strContent;
+            }
 
-                // we have MyTokens installed, proceed to token replacement
-                return (string)methodReplaceWithProps.Invoke(null, new object[] {
+            // we have MyTokens installed, proceed to token replacement
+            return (string)methodReplaceWithProps.Invoke(null, new object[] {
 	                strContent,
 	                User,
 	                !(PortalController.GetCurrentPortalSettings().UserMode == PortalSettings.Mode.View),
 	                ModuleInfo,
 	                PropertySource,
 	                CurrentAccessLevel,
-	                AccessingUser
-                });
-
-            }
+	                AccessingUser });
         }
 		
 		#endregion

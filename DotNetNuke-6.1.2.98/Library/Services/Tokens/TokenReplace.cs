@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2011
+// Copyright (c) 2002-2012
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -406,17 +406,16 @@ namespace DotNetNuke.Services.Tokens
 
         public string TokenizeWithMyTokens(string strContent)
         {
+            if (HttpRuntime.Cache == null)
+                return strContent;
+
+            string cacheKey_Installed = "avt.MyTokens2.InstalledCore";
+            string cacheKey_MethodReplaceWithProp = "avt.MyTokens2.MethodReplaceWithPropsCore";
+
+            string bMyTokensInstalled = "no";
+            System.Reflection.MethodInfo methodReplaceWithProps = null;
+
             lock (typeof(TokenReplace)) {
-                if (HttpRuntime.Cache == null) {
-                    return strContent;
-                }
-
-                string cacheKey_Installed = "avt.MyTokens2.InstalledCore";
-                string cacheKey_MethodReplaceWithProp = "avt.MyTokens2.MethodReplaceWithPropsCore";
-
-                string bMyTokensInstalled = "no";
-                System.Reflection.MethodInfo methodReplaceWithProps = null;
-
                 // first, determine if MyTokens is installed
                 bool bCheck = HttpRuntime.Cache.Get(cacheKey_Installed) == null;
                 if (!bCheck) {
@@ -435,14 +434,14 @@ namespace DotNetNuke.Services.Tokens
 
                         // we now know MyTokens is installed, get ReplaceTokensAll methods
                         methodReplaceWithProps = myTokensRepl.GetMethod("ReplaceTokensAll", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, System.Reflection.CallingConventions.Any, new System.Type[] {
-					        typeof(string),
-					        typeof(UserInfo),
-					        typeof(bool),
-					        typeof(ModuleInfo),
-					        typeof(System.Collections.Generic.Dictionary<string, IPropertyAccess>),
-					        typeof(Scope),
-					        typeof(UserInfo)
-				        }, null);
+					            typeof(string),
+					            typeof(UserInfo),
+					            typeof(bool),
+					            typeof(ModuleInfo),
+					            typeof(System.Collections.Generic.Dictionary<string, IPropertyAccess>),
+					            typeof(Scope),
+					            typeof(UserInfo)
+				            }, null);
 
                         if (methodReplaceWithProps == null) {
                             // this shouldn't really happen, we know MyTokens is installed
@@ -464,33 +463,31 @@ namespace DotNetNuke.Services.Tokens
                         HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "false");
                     }
                 }
+            }
 
-                bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString();
-                if (bMyTokensInstalled == "yes") {
-                    if (strContent.IndexOf("[") == -1) {
-                        return strContent;
-                    }
-                    methodReplaceWithProps = (System.Reflection.MethodInfo)HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp);
-                    if ((methodReplaceWithProps == null)) {
-                        HttpRuntime.Cache.Remove(cacheKey_Installed);
-                        return TokenizeWithMyTokens(strContent);
-                    }
-                } else {
+            bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString();
+            if (bMyTokensInstalled == "yes") {
+                if (strContent.IndexOf("[") == -1) {
                     return strContent;
                 }
+                methodReplaceWithProps = (System.Reflection.MethodInfo)HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp);
+                if ((methodReplaceWithProps == null)) {
+                    HttpRuntime.Cache.Remove(cacheKey_Installed);
+                    return TokenizeWithMyTokens(strContent);
+                }
+            } else {
+                return strContent;
+            }
 
-                // we have MyTokens installed, proceed to token replacement
-                return (string)methodReplaceWithProps.Invoke(null, new object[] {
+            // we have MyTokens installed, proceed to token replacement
+            return (string)methodReplaceWithProps.Invoke(null, new object[] {
 	                strContent,
 	                User,
 	                !(PortalController.GetCurrentPortalSettings().UserMode == PortalSettings.Mode.View),
 	                ModuleInfo,
 	                PropertySource,
 	                CurrentAccessLevel,
-	                AccessingUser
-                });
-
-            }
+	                AccessingUser });
         }
 		
 		#endregion

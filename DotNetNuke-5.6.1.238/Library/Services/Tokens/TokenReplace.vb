@@ -368,19 +368,19 @@ Namespace DotNetNuke.Services.Tokens
 
         Function TokenizeWithMyTokens(ByVal strContent As String) As String
 
+
+            If HttpRuntime.Cache Is Nothing Then
+                Return strContent
+            End If
+
+            Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
+            Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithPropsCore"
+
+            Dim bMyTokensInstalled As String = "no"
+            Dim methodReplaceWithProps As MethodInfo = Nothing
+
+            ' first, determine if MyTokens is installed
             SyncLock GetType(TokenReplace)
-
-                If HttpRuntime.Cache Is Nothing Then
-                    Return strContent
-                End If
-
-                Dim cacheKey_Installed As String = "avt.MyTokens2.InstalledCore"
-                Dim cacheKey_MethodReplaceWithProp As String = "avt.MyTokens2.MethodReplaceWithPropsCore"
-
-                Dim bMyTokensInstalled As String = "no"
-                Dim methodReplaceWithProps As MethodInfo = Nothing
-
-                ' first, determine if MyTokens is installed
                 Dim bCheck As Boolean = HttpRuntime.Cache.Get(cacheKey_Installed) Is Nothing
                 If Not bCheck Then
                     bCheck = HttpRuntime.Cache.Get(cacheKey_Installed).ToString() = "yes" And HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp) Is Nothing
@@ -433,25 +433,22 @@ Namespace DotNetNuke.Services.Tokens
                         HttpRuntime.Cache.Insert("avt.MyTokens2.CorePatched", "false")
                     End If
                 End If
-
-                bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString()
-                If bMyTokensInstalled = "yes" Then
-                    If strContent.IndexOf("[") = -1 Then
-                        Return strContent
-                    End If
-                    methodReplaceWithProps = DirectCast(HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp), MethodInfo)
-                    If (methodReplaceWithProps Is Nothing) Then
-                        HttpRuntime.Cache.Remove(cacheKey_Installed)
-                        Return TokenizeWithMyTokens(strContent)
-                    End If
-                Else
-                    Return strContent
-                End If
-
-                ' we have MyTokens installed, proceed to token replacement
-                Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
-
             End SyncLock
+
+            bMyTokensInstalled = HttpRuntime.Cache.Get(cacheKey_Installed).ToString()
+            If bMyTokensInstalled = "yes" Then
+                methodReplaceWithProps = DirectCast(HttpRuntime.Cache.Get(cacheKey_MethodReplaceWithProp), MethodInfo)
+                If (methodReplaceWithProps Is Nothing) Then
+                    HttpRuntime.Cache.Remove(cacheKey_Installed)
+                    Return TokenizeWithMyTokens(strContent)
+                End If
+            Else
+                Return strContent
+            End If
+
+            ' we have MyTokens installed, proceed to token replacement
+            Return DirectCast(methodReplaceWithProps.Invoke(Nothing, New Object() {strContent, User, Not (PortalController.GetCurrentPortalSettings().UserMode = PortalSettings.Mode.View), ModuleInfo, PropertySource, CurrentAccessLevel, AccessingUser}), String)
+
         End Function
 
 
